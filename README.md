@@ -1,11 +1,22 @@
-# MTG Keypoint Regression – Dataset + Model Training Pipeline
+# Simple MTG Keypoint Regression – Dataset + Model Training Pipeline
 
 [View the full model training notebook on Kaggle.](https://www.kaggle.com/code/jaketurner616/mtg-keypoint-regression-heatmap) Or run the project locally.
 
+This project generates synthetic training data using MTG artwork, applies controlled distortions, and trains a TensorFlow-based corner regression model. The final model is exported to TensorFlow.js for real-time MTG ROI extraction on the web.
 
-This project generates synthetic training data using MTG artwork, applies controlled distortions, and trains a TensorFlow-based corner regression model. The final model is exported to TensorFlow.js for real-time web inference for MTG ROI extraction on edge devices.
+<p align="center"> <img src="/docs/epoch_03.jpg" alt="Early epoch prediction with poor alignment" width="400"/> <img src="/docs/epoch_30.jpg" alt="Late epoch prediction with precise corners" width="400"/> </p> <p align="center"> <b>Left:</b> Epoch 3 – early in training, poor alignment between prediction and target<br> <b>Right:</b> Epoch 30 – late in training, predicted corners closely match ground truth<br><br> <span style="color:green;"><b>🟢 Green:</b></span> Ground truth corner &nbsp;&nbsp;|&nbsp;&nbsp; <span style="color:red;"><b>🔴 Red:</b></span> Model-prediction via soft-argmax</p>
 
-<p align="center"> <img src="/docs/epoch_03.jpg" alt="Early epoch prediction with poor alignment" width="400"/> <img src="/docs/epoch_30.jpg" alt="Late epoch prediction with precise corners" width="400"/> </p> <p align="center"> <b>Left:</b> Early prediction (Epoch 3) &nbsp;&nbsp; | &nbsp;&nbsp; <b>Right:</b> Refined prediction (Epoch 30) </p>
+---
+
+### GPU Usage/Training Summary
+
+| Property             | Value                      |
+|----------------------|----------------------------|
+| GPU                  | Tesla P100-PCIE-16GB       |
+| Allocated VRAM       | 15,513 MB                  |
+| Compute Capability   | 6.0                        |
+| cuDNN Version        | 90300                      |
+| XLA Compilation      | Enabled                    |
 
 ---
 
@@ -64,15 +75,9 @@ Each synthetic image is saved as a `.jpg`, and its 4 corner positions are record
 
 * Loads the `.keras` model with the custom `SoftArgmax` layer
 * Converts it into a TFJS `graph_model` for browser inference
-* Outputs to a zip archive (`web_model.zip`) containing:
+* Outputs to a zip archive (`web_model.zip`)
 
-  ```
-  web_model/
-    model.json
-    group1-shard1of1.bin
-  ```
-
-> This model can be used on the web for ROI card extraction.
+> The model can be used on the web for ROI card extraction with tfjs.
 
 ---
 
@@ -99,4 +104,4 @@ The model created from this workflow  can be used to:
 
 ## License
 
-All dataset generation code is released under the [GNU GPL v3.0](LICENSE) LICENSE.
+All dataset generation code is released under the [GNU GPL v3.0](LICENSE) LICENSE. Dependencies may have different Licensing.
