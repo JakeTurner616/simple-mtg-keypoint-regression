@@ -1,0 +1,5 @@
+*.json
+*.zip
+dataset/
+backgrounds/
+venv/
