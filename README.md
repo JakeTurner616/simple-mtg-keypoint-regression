@@ -1,51 +1,34 @@
-# Simple MTG Keypoint Regression – Dataset + Model Training Pipeline
+# Simple MTG Keypoint Regression
 
-[View the full model training notebook on Kaggle.](https://www.kaggle.com/code/jaketurner616/mtg-keypoint-regression-heatmap) Or run the project locally.
+**Synthetic Dataset + Heatmap-Based Corner Detection**
 
-This project generates synthetic training data using MTG artwork, applies controlled distortions, and trains a TensorFlow-based corner regression model. The final model is exported to TensorFlow.js for real-time MTG ROI extraction on the web.
+Train a lightweight heatmap regression model to localize Magic: The Gathering card corners in real-time using only artwork and synthetic transformations.
 
-<p align="center"> <img src="/docs/epoch_03.jpg" alt="Early epoch prediction with poor alignment" width="400"/> <img src="/docs/epoch_30.jpg" alt="Late epoch prediction with precise corners" width="400"/> </p> <p align="center"> <b>Left:</b> Epoch 3 – early in training, poor alignment between prediction and target<br> <b>Right:</b> Epoch 30 – late in training, predicted corners closely match ground truth<br><br> <span style="color:green;"><b>🟢 Green:</b></span> Ground truth corner &nbsp;&nbsp;|&nbsp;&nbsp; <span style="color:red;"><b>🔴 Red:</b></span> Model-prediction via soft-argmax</p>
+[📘 View Training Notebook on Kaggle](https://www.kaggle.com/code/jaketurner616/mtg-keypoint-regression-heatmap)
 
----
-
-### GPU Usage/Training Summary
-
-| Property             | Value                      |
-|----------------------|----------------------------|
-| GPU                  | Tesla P100-PCIE-16GB       |
-| Allocated VRAM       | 15,513 MB                  |
-| Compute Capability   | 6.0                        |
-| cuDNN Version        | 90300                      |
-| XLA Compilation      | Enabled                    |
+<p align="center">
+  <img src="/docs/epoch_03.jpg" width="400"/>
+  <img src="/docs/epoch_30.jpg" width="400"/>
+</p>
+<p align="center">
+  <b>Left:</b> Early prediction (Epoch 3) — poor alignment<br>
+  <b>Right:</b> Late prediction (Epoch 30) — close match to ground truth<br><br>
+  🟢 = Ground truth corner | 🔴 = Model prediction via soft-argmax
+</p>
 
 ---
 
-## Repository Structure
+## 🧭 Project Workflow
 
-```
-.
-├── dataset.py                             # Script to create synthetic dataset + labels
-├── backgrounds/                           # Directory of background images for synthetic dataset
-├── dataset/                               # Output directory for synthetic dataset
-├── dataset/annotations.json               # Output annotation file with 4 corner keypoints per image
-├── unique-artwork-*.json                  # Scryfall artwork dump for synthetic dataset
-├── mtg-keypoint-regression-heatmap.ipynb  # Exported notebook for heatmap-based training using Kaggle GPU
-```
+This repo covers the entire pipeline:
 
----
+### 🔧 1. **Synthetic Dataset Generation**
 
-## Overview
-
-### 1. Dataset Generation (`dataset.py`)
-
-* **Downloads card images** by performing a set amount of 'cycles' to add equally diverse border styles.
-* **Applies perspective & affine transforms** to simulate real-world camera angle perspective shifts
-* **Composites each card** onto random photographic and texture backgrounds
-* **Annotates true corner positions** of the distorted card in the output image
-
-Each synthetic image is saved as a `.jpg`, and its 4 corner positions are recorded in `annotations.json`.
-
-### Output format:
+* Uses real Scryfall card art with equal sampling of black, white, and borderless cards
+* Applies controlled augmentations (rotation, perspective, scaling)
+* Randomly composites onto photo/textured backgrounds
+* Records true 4-corner annotations in pixel space
+* Output format:
 
 ```json
 {
@@ -55,50 +38,70 @@ Each synthetic image is saved as a `.jpg`, and its 4 corner positions are record
 }
 ```
 
-> Images are 1024×1024 with randomized placement, scale, and angle. All data is stored locally and can be extended with new backgrounds or distortion rules.
+> ✅ All assets are locally generated, reproducible, and extensible
 
 ---
 
-### 2. Model Training (`mtg-keypoint-regression-heatmap.ipynb`)
+### 🧠 2. **Model Training (Heatmap + SoftArgmax)**
 
-* Loads the dataset and builds a dual-output model:
+* Model type: Convolutional neural network with dual outputs
 
-  * `heatmaps`: 4 heatmap channels (one per corner)
-  * `coords`: predicted coordinates via soft-argmax
-* Based on a pretrained ResNet-50 backbone (ImageNet weights)
-* Uses MSE loss on heatmaps with soft-argmax refinement for coordinate accuracy
-* Metrics include average corner error in pixels
+  * `heatmaps` – 4-channel spatial probability maps
+  * `coords` – XY corner coordinates via differentiable soft-argmax
+* Backbone: **MobileNetV2** (ImageNet pretrained)
+* Loss: MSE over heatmaps (softargmax is used for decoding, not supervised directly)
+* Metrics: Pixel distance between predicted and ground-truth corners
+* Visualized per-epoch outputs are saved to disk
 
-> Visualizations are saved per epoch showing both ground-truth and predicted corners.
-
-* Web Export
-
-* Loads the `.keras` model with the custom `SoftArgmax` layer
-* Converts it into a TFJS `graph_model` for browser inference
-* Outputs to a zip archive (`web_model.zip`)
-
-> The model can be used on the web for ROI card extraction with tfjs.
+> 💡 Optimized for TensorFlow\.js WASM-compatible deployment
 
 ---
 
-## Dataset Details
+### 🌐 3. **Web Deployment (TF.js Export)**
 
-| Parameter         | Value                                           |
-| ----------------- | ----------------------------------------------- |
-| Image size        | 1024×1024                                       |
-| Output format     | `.jpg`                                          |
-| Label format      | 4 corner points in pixel space                  |
-| Number of samples | \~5,000 (customizable)                          |
-| Augmentations     | Rotation, Affine, Perspective, Background Blend |
+* Keras model saved as `.keras` format with custom `SoftArgmax` layer
+* Converted using `tensorflowjs_converter` to `tfjs_graph_model`
+* Outputs ZIP archive: `web_model.zip` for frontend use
+* Compatible with browser-based MTG scanners, ROI extractors, or mobile inference
 
 ---
 
-## Use in Production
+## 🗂️ Repository Layout
 
-The model created from this workflow  can be used to:
+```
+.
+├── dataset.py                             # Synthetic image + annotation generator
+├── backgrounds/                           # Natural backgrounds used for compositing
+├── dataset/                               # Output image directory
+├── dataset/annotations.json               # Ground truth corner positions
+├── unique-artwork-*.json                  # MTG card art scraped from Scryfall
+├── mtg-keypoint-regression-heatmap.ipynb  # Training notebook (Kaggle-ready)
+```
 
-* Detect the precise location of a real MTG card in a frame
-* Normalize the region of interest for descriptor extraction
+---
+
+## ⚙️ Technical Specs
+
+### 🧪 Dataset Summary
+
+| Parameter     | Value                                             |
+| ------------- | ------------------------------------------------- |
+| Image size    | 1024×1024                                         |
+| Format        | `.jpg`                                            |
+| Labels        | 4 corner points in pixel space                    |
+| Dataset size  | \~5,000 samples (expandable)                      |
+| Augmentations | Affine, perspective, rotation, background overlay |
+
+---
+
+### 🚀 Training Hardware
+
+| Property      | Value                  |
+| ------------- | ---------------------- |
+| GPU           | Tesla P100 (16GB VRAM) |
+| TF XLA        | Enabled                |
+| cuDNN Version | 9.3.0                  |
+| Training Time | \~30 mins (35 epochs)  |
 
 ---
 
