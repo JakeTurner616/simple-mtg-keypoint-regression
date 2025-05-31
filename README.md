@@ -18,17 +18,24 @@ Train a lightweight heatmap regression model to localize Magic: The Gathering ca
 
 ---
 
-## 🧭 Project Workflow
+## Project Overview
 
-This repo covers the entire pipeline:
+This repository covers the full pipeline for:
 
-### 🔧 1. **Synthetic Dataset Generation**
+1. Generating synthetic training data from real MTG card art
+2. Training a keypoint regression model using heatmaps + soft-argmax
+3. Exporting a compact TensorFlow\.js model for web/mobile inference
 
-* Uses real Scryfall card art with equal sampling of black, white, and borderless cards
-* Applies controlled augmentations (rotation, perspective, scaling)
-* Randomly composites onto photo/textured backgrounds
-* Records true 4-corner annotations in pixel space
-* Output format:
+---
+
+## 1. Synthetic Dataset Generation
+
+* Sources card images from the Scryfall API (black, white, and borderless frame parity enforced)
+* Applies controlled perspective, affine, and rotation transforms
+* Cards are composited over randomized photographic or textured backgrounds
+* Annotations include the 4 corner coordinates in 1024×1024 pixel space
+
+**Output example:**
 
 ```json
 {
@@ -38,73 +45,84 @@ This repo covers the entire pipeline:
 }
 ```
 
-> ✅ All assets are locally generated, reproducible, and extensible
+All assets are procedurally generated and can be reproduced or extended with additional transformation rules or art sources.
 
 ---
 
-### 🧠 2. **Model Training (Heatmap + SoftArgmax)**
+## 2. Model Training
 
-* Model type: Convolutional neural network with dual outputs
+### Workflow
 
-  * `heatmaps` – 4-channel spatial probability maps
-  * `coords` – XY corner coordinates via differentiable soft-argmax
-* Backbone: **MobileNetV2** (ImageNet pretrained)
-* Loss: MSE over heatmaps (softargmax is used for decoding, not supervised directly)
-* Metrics: Pixel distance between predicted and ground-truth corners
-* Visualized per-epoch outputs are saved to disk
+* Backbone: `MobileNetV2` (pretrained, lightweight)
+* Output: 4-channel heatmap (56×56) + decoded corner coordinates
+* Decoder: Differentiable soft-argmax (implemented as a Keras layer)
+* Loss: MSE over heatmaps only (coordinate output is derived, not directly supervised)
+* Training: \~35 epochs on Kaggle P100; early stopping and simplified callbacks
 
-> 💡 Optimized for TensorFlow\.js WASM-compatible deployment
+### Differences from Previous Workflow for mobile target:
+
+| Aspect             | Old Workflow                               | New Workflow                                 |
+| ------------------ | ------------------------------------------ | -------------------------------------------- |
+| Backbone           | ResNet50 with multi-scale skip connections | MobileNetV2 (single-output, smaller model)   |
+| Heatmap resolution | 112×112                                    | 56×56                                        |
+| Sigma              | 2.0 (broader peaks)                        | 1.5 (sharper localization)                   |
+| Loss config        | Combined loss with heatmap + coordinates   | Only heatmap loss (coordinates inferred)     |
+| Callbacks          | TQDM, ReduceLROnPlateau, visual debugger   | EarlyStopping only                           |
+| Export flow        | `.keras` → SavedModel → TFJS               | Direct `.keras` export with `model.export()` |
+| TFJS compatibility | Manual wrapping of soft-argmax for export  | Fully WASM-compatible model at export time   |
 
 ---
 
-### 🌐 3. **Web Deployment (TF.js Export)**
+## 3. Web Deployment
 
-* Keras model saved as `.keras` format with custom `SoftArgmax` layer
-* Converted using `tensorflowjs_converter` to `tfjs_graph_model`
-* Outputs ZIP archive: `web_model.zip` for frontend use
-* Compatible with browser-based MTG scanners, ROI extractors, or mobile inference
+* Model exported as a TFJS graph model using `tensorflowjs_converter`
+* Target format: `tfjs_graph_model` (WASM-safe)
+* Export directory is zipped as `web_model.zip` for use in the frontend
+* Optimized for use with `@tensorflow/tfjs-backend-wasm` or `webgl` runtime backends
 
 ---
 
-## 🗂️ Repository Layout
+## Repository Structure
 
 ```
 .
-├── dataset.py                             # Synthetic image + annotation generator
-├── backgrounds/                           # Natural backgrounds used for compositing
-├── dataset/                               # Output image directory
-├── dataset/annotations.json               # Ground truth corner positions
-├── unique-artwork-*.json                  # MTG card art scraped from Scryfall
-├── mtg-keypoint-regression-heatmap.ipynb  # Training notebook (Kaggle-ready)
+├── dataset.py                             # Synthetic dataset generator
+├── backgrounds/                           # Real-world composite backgrounds
+├── dataset/                               # Generated images + annotations
+│   └── annotations.json                   # 4-corner annotations
+├── unique-artwork-*.json                  # Scryfall data source
+├── mtg-keypoint-regression-heatmap.ipynb  # Training notebook
 ```
 
 ---
 
-## ⚙️ Technical Specs
+## Dataset Summary
 
-### 🧪 Dataset Summary
-
-| Parameter     | Value                                             |
-| ------------- | ------------------------------------------------- |
-| Image size    | 1024×1024                                         |
-| Format        | `.jpg`                                            |
-| Labels        | 4 corner points in pixel space                    |
-| Dataset size  | \~5,000 samples (expandable)                      |
-| Augmentations | Affine, perspective, rotation, background overlay |
+| Attribute     | Value                             |
+| ------------- | --------------------------------- |
+| Image size    | 1024×1024                         |
+| Format        | `.jpg`                            |
+| Labels        | 4-point corner annotations (x, y) |
+| Sample count  | \~5,000 (configurable)            |
+| Augmentations | Perspective, affine, rotation     |
+| Backgrounds   | Random photos/textures            |
 
 ---
 
-### 🚀 Training Hardware
+## Training Environment
 
-| Property      | Value                  |
-| ------------- | ---------------------- |
-| GPU           | Tesla P100 (16GB VRAM) |
-| TF XLA        | Enabled                |
-| cuDNN Version | 9.3.0                  |
-| Training Time | \~30 mins (35 epochs)  |
+| Spec         | Value                  |
+| ------------ | ---------------------- |
+| Hardware     | Tesla P100 (16GB VRAM) |
+| Image input  | 224×224                |
+| Heatmap size | 56×56                  |
+| Epochs       | 35                     |
+| Batch size   | 16                     |
+| TFJS runtime | WASM + WebGL           |
 
 ---
 
 ## License
 
-All dataset generation code is released under the [GNU GPL v3.0](LICENSE) LICENSE. Dependencies may have different Licensing.
+All dataset generation and model code is licensed under [GNU GPL v3.0](LICENSE).
+Please consult individual dependencies for their respective licenses. Card artwork is pulled via [Scryfall](https://scryfall.com/docs/api).
